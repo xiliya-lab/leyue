@@ -117,8 +117,8 @@
         .btn-edit-ch { background: var(--input-bg); color: var(--text-main); }
         .btn-del-ch { background: rgba(217, 83, 79, 0.1); color: var(--accent-danger); }
 
-        /* AI 划词悬浮工具栏 */
-        .ai-float-toolbar { position: absolute; display: none; background: var(--text-main); color: var(--surface-color); padding: 8px 12px; border-radius: 12px; font-size: 0.9rem; font-weight: 600; cursor: pointer; box-shadow: 0 8px 16px rgba(0,0,0,0.2); z-index: 100; transform: translateY(-40px); }
+        /* AI 划词悬浮工具栏 (改为 fixed 定位以避免滚动错位) */
+        .ai-float-toolbar { position: fixed; display: none; background: var(--text-main); color: var(--surface-color); padding: 8px 12px; border-radius: 12px; font-size: 0.9rem; font-weight: 600; cursor: pointer; box-shadow: 0 8px 16px rgba(0,0,0,0.2); z-index: 1000; transform: translateY(-40px); }
         .ai-float-toolbar:active { transform: translateY(-38px) scale(0.95); }
         .ai-float-toolbar::after { content: ''; position: absolute; bottom: -6px; left: 50%; margin-left: -6px; border-width: 6px 6px 0; border-style: solid; border-color: var(--text-main) transparent transparent transparent; }
 
@@ -194,12 +194,13 @@
                 </div>
                 <div class="form-group">
                     <label>模型</label>
-                    <input type="text" id="current-model-input" class="model-input" value="gemini-3.5-flash-lite">
+                    <input type="text" id="current-model-input" class="model-input" value="gemini-1.5-flash">
                     <div class="model-chips">
+                        <!-- 修正为实际存在的可用模型名称 -->
                         <button class="chip active" data-model="gemini-3.5-flash-lite">3.5-flash-lite</button>
                         <button class="chip" data-model="gemini-3.5-flash">3.5-flash</button>
-						<button class="chip" data-model="gemini-3.6-flash">3.6-flash</button>
-						<button class="chip" data-model="gemini-3.7-flash">3.7-flash</button>
+                        <button class="chip" data-model="gemini-3.6-flash">3.6-flash</button>
+                        <button class="chip" data-model="gemini-3.7-flash">3.7-flash</button>
                     </div>
                 </div>
                 <button id="btn-settings-save" class="btn-large">保存设置</button>
@@ -228,7 +229,6 @@
             <button id="btn-save-chapter" class="btn-text" style="color: var(--accent-green); font-weight: 600;">保存</button>
         </div>
         <div class="workspace-body">
-            <!-- 栏目1：写作 -->
             <div id="ws-tab-write" class="workspace-tab-content active">
                 <div class="editor-container" id="editor-container-box">
                     <div class="card prompt-box" style="margin-bottom: 0;">
@@ -239,7 +239,6 @@
                     <div id="ai-float-toolbar" class="ai-float-toolbar">润色</div>
                 </div>
             </div>
-            <!-- 栏目2：背景 -->
             <div id="ws-tab-bg" class="workspace-tab-content">
                 <div class="bg-form-group">
                     <label>剧情背景 (World Background)</label>
@@ -248,12 +247,10 @@
                     <textarea id="writing-rules-input" placeholder="例如：1. 增加环境描写；2. 文风冷酷..." style="flex: 0.6"></textarea>
                 </div>
             </div>
-            <!-- 栏目3：角色 (NEW) -->
             <div id="ws-tab-chars" class="workspace-tab-content">
                 <button id="btn-show-add-char" class="btn-large" style="margin-bottom: 1.5rem; margin-top: 0; background: var(--accent-primary);">+ 添加角色设定</button>
                 <div id="char-list-container" style="padding-bottom: 2rem;"></div>
             </div>
-            <!-- 栏目4：章节管理 (更新前情提要展示) -->
             <div id="ws-tab-chapters" class="workspace-tab-content">
                 <div id="chapter-list-container" class="chapter-list"></div>
             </div>
@@ -334,17 +331,15 @@
         let currentEditingBookId = null;
         let db;
 
-        // 状态变量
         let currentReaderBookId = null;
         let currentReaderChapterIndex = 0;
         let editingChapterIndex = -1;
         let editingCharIndex = -1;
         let currentSelectedRange = null;
 
-        // --- 数据库操作 (IndexedDB) ---
         const initDB = () => {
             return new Promise((resolve, reject) => {
-                const request = indexedDB.open('MorandiWriterDB', 2); // 升级版本号
+                const request = indexedDB.open('MorandiWriterDB', 2);
                 request.onupgradeneeded = (e) => {
                     if (!e.target.result.objectStoreNames.contains('books')) 
                         e.target.result.createObjectStore('books', { keyPath: 'id' });
@@ -359,7 +354,6 @@
                 const req = tx.objectStore('books').getAll();
                 req.onsuccess = () => {
                     const data = {};
-                    // 兼容旧数据结构，植入新的默认数组
                     req.result.forEach(b => {
                         b.characters = b.characters || [];
                         b.chapterSummaries = b.chapterSummaries || [];
@@ -397,8 +391,6 @@
         }
 
         document.addEventListener('DOMContentLoaded', async () => {
-            
-            // --- 1. 配置加载与夜间模式 ---
             const keySelect = document.getElementById('key-select');
             for(let i = 1; i <= 30; i++) keySelect.add(new Option(i.toString().padStart(4, '0')));
             
@@ -422,10 +414,8 @@
                 else document.body.classList.remove('dark-mode');
             });
 
-            // 初始化 DB
             try { db = await initDB(); libraryData = await loadBooksFromDB(); renderCreatorGrid(); renderBookshelfGrid(); } catch(e) { console.error("DB Error", e); }
 
-            // --- 2. 基础导航与新建书籍 ---
             document.querySelectorAll('#main-nav .nav-item').forEach(item => {
                 item.addEventListener('click', () => {
                     document.querySelectorAll('#main-nav .nav-item, .content-area .view-section').forEach(el => el.classList.remove('active'));
@@ -446,7 +436,6 @@
                 }
             });
 
-            // 工作区导航
             document.querySelectorAll('.ws-nav-item').forEach(item => {
                 item.addEventListener('click', () => {
                     document.querySelectorAll('.ws-nav-item, .workspace-tab-content').forEach(el => el.classList.remove('active'));
@@ -457,7 +446,6 @@
                     if(target === 'chars') renderCharList();
                 });
             });
-            // 退出工作区时，强制保存最新的背景和规则
             document.getElementById('btn-close-ws').addEventListener('click', async () => { 
                 if (currentEditingBookId) {
                     const book = libraryData[currentEditingBookId];
@@ -471,7 +459,7 @@
 
             document.getElementById('ai-prompt-input').addEventListener('input', autoSaveDraft);
             document.getElementById('draft-blocks').addEventListener('input', autoSaveDraft);
-			            // --- 背景与规则的实时自动保存逻辑 (防抖 1 秒) ---
+            
             let bgSaveTimeout;
             const autoSaveBackground = () => {
                 if(!currentEditingBookId) return;
@@ -481,13 +469,11 @@
                     book.worldBg = document.getElementById('world-bg-input').value;
                     book.writingRules = document.getElementById('writing-rules-input').value;
                     await saveBookToDB(book);
-                }, 1000); // 停止打字 1 秒后自动无感保存到数据库
+                }, 1000); 
             };
             document.getElementById('world-bg-input').addEventListener('input', autoSaveBackground);
             document.getElementById('writing-rules-input').addEventListener('input', autoSaveBackground);
 
-
-            // --- 3. 角色管理 (CRUD) ---
             document.getElementById('btn-show-add-char').addEventListener('click', () => {
                 editingCharIndex = -1;
                 document.getElementById('char-modal-title').innerText = '添加角色';
@@ -516,29 +502,26 @@
                 renderCharList();
             });
 
-            // --- 4. 连线大模型 (顶级人设 + 角色库 + 动态剧情记忆) ---
             document.getElementById('btn-generate').addEventListener('click', async function() {
                 const activeId = document.getElementById('key-select').value;
-                const foundKey = document.getElementById('keystore-input').value.split('\n').find(l => l.trim().startsWith(activeId + '='))?.split('=')[1].trim();
+                // 修复：添加 ?. 避免空指针崩溃
+                const foundKey = document.getElementById('keystore-input').value.split('\n').find(l => l.trim().startsWith(activeId + '='))?.split('=')[1]?.trim();
                 if(!foundKey) return alert("请先在【配置】中填写 API Key！");
 
                 const model = document.getElementById('current-model-input').value;
                 const book = libraryData[currentEditingBookId];
                 
-                // 【拼接：动态剧情总纲】
                 let summaryContext = "";
                 if(book.chapterSummaries && book.chapterSummaries.length > 0) {
                     summaryContext = "\n\n【前情总纲 (你必须记住这些已发生的情节)】：\n" + book.chapterSummaries.map((s, i) => `第${i+1}章：${s}`).join('\n');
                 }
 
-                // 【拼接：上一章结尾记忆】
                 let previousContext = "";
                 if(book.chapters.length > 0) {
                     const lastChap = book.chapters[book.chapters.length - 1];
                     previousContext = "\n\n【上一章结尾(紧接此剧情往下写)】：\n" + lastChap.replace(/<[^>]+>/g, '').slice(-800);
                 }
 
-                // 【拼接：专属角色档案】
                 let charContext = "";
                 if(book.characters && book.characters.length > 0) {
                     charContext = "\n\n【核心出场角色档案 (严格保持人设)】：\n" + book.characters.map(c => `- ${c.name} (${c.role}): 外貌[${c.appearance}], 性格[${c.personality}], 关系[${c.relation}]`).join('\n');
@@ -552,12 +535,14 @@
                 
                 作为顶级言情作家，你必须绝对遵守以下【四大铁律】：
                 1. 错落有致的“呼吸感”排版：完美融合轻快与厚重，平时必须切碎段落（单句或两三句成段，有人说话必换行）；需要长篇幅描写时，允许段落稍长，但也必须适时拆解，保持视觉清爽。
-                2. 丰满立体的心理拉扯：绝不能只写干瘪的对话。必须深入角色的内心世界，写出言辞背后的心理波动。极其善于营造“表里不一”的错位张力。
+                2. 丰满立体的心理拉扯：绝不能只写干瘪的对话。必须深入角色的内心世界，写出言辞背后的心理波动。
                 3. “电影镜头式”的细节展示：用环境与微动作烘托情绪。巧妙穿插光影偏移、温度变化等五感描写。
                 4. 绝对沉浸与零废话：你现在就是在直接输出即将发布的VIP章节正文。**严禁**输出任何“好的”、“没问题”、“为您生成正文”等暴露AI身份的解释性废话，摒弃客套，直接起笔写小说。`;
 
                 const usr = `【本章剧情走向】：${document.getElementById('ai-prompt-input').value}\n直接开始正文创作。`;
 
+                // 修复：添加按钮禁用状态防止重复请求
+                this.disabled = true;
                 this.innerText = 'AI 思考中...';
                 document.getElementById('draft-blocks').innerHTML = '<div class="draft-block" style="text-align: center; color:var(--text-muted);">正在加载角色库与前情大纲...</div>';
 
@@ -574,10 +559,12 @@
                     autoSaveDraft(); 
                 } catch (e) {
                     document.getElementById('draft-blocks').innerHTML = `<div style="color:var(--accent-danger);">生成失败: ${e.message}</div>`;
-                } finally { this.innerText = '重新生成'; }
+                } finally { 
+                    this.innerText = '重新生成';
+                    this.disabled = false;
+                }
             });
 
-            // --- 5. 保存并自动生成摘要 (Rolling Summary) ---
             document.getElementById('btn-save-chapter').addEventListener('click', async function() {
                 if(!currentEditingBookId) return;
                 const draftBox = document.getElementById('draft-blocks');
@@ -587,15 +574,14 @@
                 if(!textHTML || getWordCount(textHTML) < 10) return alert("没有实质内容，无法保存！");
 
                 const activeId = document.getElementById('key-select').value;
-                const foundKey = document.getElementById('keystore-input').value.split('\n').find(l => l.trim().startsWith(activeId + '='))?.split('=')[1].trim();
+                const foundKey = document.getElementById('keystore-input').value.split('\n').find(l => l.trim().startsWith(activeId + '='))?.split('=')[1]?.trim();
                 
                 const book = libraryData[currentEditingBookId];
                 book.worldBg = document.getElementById('world-bg-input').value;
                 book.writingRules = document.getElementById('writing-rules-input').value;
 
-                let summary = "（暂无提要，可手动修改补充）"; // 默认摘要
+                let summary = "（暂无提要，可手动修改补充）"; 
 
-                // 如果有API，则在后台静默请求AI提取摘要
                 if(foundKey) {
                     this.innerText = '提炼剧情中...';
                     this.disabled = true;
@@ -628,7 +614,6 @@
                 if(document.getElementById('ws-tab-chapters').classList.contains('active')) renderChapterList();
             });
 
-            // 划词重写
             const toolbar = document.getElementById('ai-float-toolbar');
             const draftBox = document.getElementById('draft-blocks');
             document.addEventListener('selectionchange', () => {
@@ -636,9 +621,10 @@
                 if (!selection.isCollapsed && selection.rangeCount > 0 && draftBox.contains(selection.anchorNode)) {
                     const range = selection.getRangeAt(0);
                     const rect = range.getBoundingClientRect();
-                    const containerRect = document.getElementById('editor-container-box').getBoundingClientRect();
-                    toolbar.style.left = (rect.left - containerRect.left + rect.width / 2 - toolbar.offsetWidth / 2) + 'px';
-                    toolbar.style.top = (rect.top - containerRect.top) + 'px';
+                    
+                    // 修复：改为相对于 viewport 屏幕位置进行定位，防止滚动错位
+                    toolbar.style.left = (rect.left + rect.width / 2 - toolbar.offsetWidth / 2) + 'px';
+                    toolbar.style.top = rect.top + 'px';
                     toolbar.style.display = 'block';
                     currentSelectedRange = range.cloneRange();
                 } else { setTimeout(() => { if(!toolbar.matches(':hover')) toolbar.style.display = 'none'; }, 100); }
@@ -652,7 +638,7 @@
                 
                 toolbar.style.display = 'none';
                 const activeId = document.getElementById('key-select').value;
-                const foundKey = document.getElementById('keystore-input').value.split('\n').find(l => l.trim().startsWith(activeId + '='))?.split('=')[1].trim();
+                const foundKey = document.getElementById('keystore-input').value.split('\n').find(l => l.trim().startsWith(activeId + '='))?.split('=')[1]?.trim();
                 if(!foundKey) return alert("请配置 API Key");
                 
                 try {
@@ -669,7 +655,6 @@
                 } catch(e) { alert("重写失败"); }
             });
 
-            // 导出与导入
             document.getElementById('btn-export-txt').addEventListener('click', () => {
                 const book = libraryData[currentReaderBookId];
                 let txtContent = `《${book.title}》\n\n`;
@@ -699,7 +684,6 @@
                 }; reader.readAsText(file);
             });
 
-            // 其他交互
             document.getElementById('btn-cancel-edit-ch').addEventListener('click', () => document.getElementById('edit-chapter-overlay').classList.remove('open'));
             document.getElementById('btn-save-edit-ch').addEventListener('click', async () => {
                 if(editingChapterIndex === -1) return;
@@ -708,7 +692,11 @@
                 libraryData[currentEditingBookId].chapters[editingChapterIndex] = html;
                 await saveBookToDB(libraryData[currentEditingBookId]);
                 document.getElementById('edit-chapter-overlay').classList.remove('open');
-                renderChapterList(); renderBookshelfGrid();
+                
+                // 修复：除了更新章节列表，同步刷新首页创作区数据
+                renderChapterList(); 
+                renderBookshelfGrid();
+                renderCreatorGrid();
             });
 
             document.getElementById('btn-close-reader').addEventListener('click', () => document.getElementById('reader-overlay').classList.remove('open'));
@@ -742,7 +730,6 @@
             });
         });
 
-        /* --- 渲染UI --- */
         async function deleteBook(event, bookId) {
             event.stopPropagation();
             if(confirm("确定彻底删除这本书吗？(此操作不可逆)")) {
@@ -774,7 +761,6 @@
             document.getElementById('empty-bookshelf-hint').style.display = hasBooks ? 'none' : 'block';
         }
 
-        // 渲染角色列表
         function renderCharList() {
             const container = document.getElementById('char-list-container'); container.innerHTML = '';
             const book = libraryData[currentEditingBookId];
@@ -812,7 +798,6 @@
             }
         };
 
-        // 渲染章节列表 (现在加入了摘要显示)
         function renderChapterList() {
             const container = document.getElementById('chapter-list-container'); container.innerHTML = '';
             const book = libraryData[currentEditingBookId];
@@ -846,7 +831,11 @@
                 libraryData[currentEditingBookId].chapters.splice(index, 1);
                 libraryData[currentEditingBookId].chapterSummaries.splice(index, 1);
                 await saveBookToDB(libraryData[currentEditingBookId]);
-                renderChapterList(); renderBookshelfGrid();
+                
+                // 修复：除章节视图外，同步重绘首页网格以更新总字数
+                renderChapterList(); 
+                renderBookshelfGrid();
+                renderCreatorGrid();
             }
         }
 
