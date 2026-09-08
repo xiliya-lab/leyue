@@ -546,13 +546,33 @@
                 this.innerText = 'AI 思考中...';
                 document.getElementById('draft-blocks').innerHTML = '<div class="draft-block" style="text-align: center; color:var(--text-muted);">正在加载角色库与前情大纲...</div>';
 
-                try {
+                                try {
                     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${foundKey}`, {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: sys + "\n\n" + usr }] }] })
+                        body: JSON.stringify({ 
+                            contents: [{ role: "user", parts: [{ text: sys + "\n\n" + usr }] }],
+                            // 增加安全设置，允许生成小说中的冲突、受挫或成人向擦边情节
+                            safetySettings: [
+                                { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+                                { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+                                { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+                                { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+                            ]
+                        })
                     });
-                    if (!res.ok) throw new Error("API请求失败");
+                    
+                    if (!res.ok) throw new Error(`API请求失败 (状态码: ${res.status})`);
+                    
                     const data = await res.json();
+                    
+                    // 增加安全审查拦截和空数据的容错校验
+                    if (!data.candidates || data.candidates.length === 0) {
+                        if (data.promptFeedback && data.promptFeedback.blockReason) {
+                            throw new Error(`已被 API 安全审查拦截，原因: ${data.promptFeedback.blockReason}`);
+                        }
+                        throw new Error("API 返回了未知结构或空数据");
+                    }
+                    
                     const text = data.candidates[0].content.parts[0].text;
                     const html = text.split('\n').filter(p => p.trim() !== '').map(p => `<p style="margin-bottom:1em; text-indent: 2em;">${p}</p>`).join('');
                     document.getElementById('draft-blocks').innerHTML = html;
@@ -563,6 +583,7 @@
                     this.innerText = '重新生成';
                     this.disabled = false;
                 }
+
             });
 
             document.getElementById('btn-save-chapter').addEventListener('click', async function() {
