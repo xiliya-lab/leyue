@@ -549,7 +549,7 @@
                     autoSaveDraft(); 
                 } catch (e) {
                     document.getElementById('draft-blocks').innerHTML = `<div style="color:var(--accent-danger);">生成失败: ${e.message}</div>`;
-                } finally { this.innerText = '✨ 重新生成'; }
+                } finally { this.innerText = '重新生成'; }
             });
 
             // --- 5. 保存并自动生成摘要 (Rolling Summary) ---
