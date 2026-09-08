@@ -457,10 +457,35 @@
                     if(target === 'chars') renderCharList();
                 });
             });
-            document.getElementById('btn-close-ws').addEventListener('click', () => { document.getElementById('workspace-overlay').classList.remove('open'); currentEditingBookId = null; });
+            // 退出工作区时，强制保存最新的背景和规则
+            document.getElementById('btn-close-ws').addEventListener('click', async () => { 
+                if (currentEditingBookId) {
+                    const book = libraryData[currentEditingBookId];
+                    book.worldBg = document.getElementById('world-bg-input').value;
+                    book.writingRules = document.getElementById('writing-rules-input').value;
+                    await saveBookToDB(book);
+                }
+                document.getElementById('workspace-overlay').classList.remove('open'); 
+                currentEditingBookId = null; 
+            });
 
             document.getElementById('ai-prompt-input').addEventListener('input', autoSaveDraft);
             document.getElementById('draft-blocks').addEventListener('input', autoSaveDraft);
+			            // --- 背景与规则的实时自动保存逻辑 (防抖 1 秒) ---
+            let bgSaveTimeout;
+            const autoSaveBackground = () => {
+                if(!currentEditingBookId) return;
+                clearTimeout(bgSaveTimeout);
+                bgSaveTimeout = setTimeout(async () => {
+                    const book = libraryData[currentEditingBookId];
+                    book.worldBg = document.getElementById('world-bg-input').value;
+                    book.writingRules = document.getElementById('writing-rules-input').value;
+                    await saveBookToDB(book);
+                }, 1000); // 停止打字 1 秒后自动无感保存到数据库
+            };
+            document.getElementById('world-bg-input').addEventListener('input', autoSaveBackground);
+            document.getElementById('writing-rules-input').addEventListener('input', autoSaveBackground);
+
 
             // --- 3. 角色管理 (CRUD) ---
             document.getElementById('btn-show-add-char').addEventListener('click', () => {
