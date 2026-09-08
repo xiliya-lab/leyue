@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>Morandi Writer</title>
+    <link rel="manifest" href="manifest.json">
+
+    <style>
+        :root {
+            /* 莫兰迪日间模式 */
+            --bg-color: #F7F5F0;        
+            --surface-color: #FFFFFF;   
+            --input-bg: #F0EFEA;        
+            --text-main: #4A4641;       
+            --text-muted: #99938B;      
+            --accent-primary: #C2B6A6;  
+            --accent-green: #9CA99E;
+            --accent-danger: #D9534F;
+            --shadow-soft: 0 12px 32px rgba(138, 129, 118, 0.08);
+            --safe-bottom: env(safe-area-inset-bottom, 20px);
+            --safe-top: env(safe-area-inset-top, 0px);
+        }
+
+        body.dark-mode {
+            --bg-color: #262423;        
+            --surface-color: #33302E;   
+            --input-bg: #3F3C3A;        
+            --text-main: #E6E1DC;       
+            --text-muted: #9E9A96;      
+            --accent-primary: #9CA99E;  
+            --shadow-soft: 0 12px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'system-ui', -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
+        body { background-color: var(--bg-color); color: var(--text-main); display: flex; flex-direction: column; height: 100dvh; overflow: hidden; transition: background-color 0.3s, color 0.3s; }
+
+        .content-area { flex: 1; overflow-y: auto; padding: calc(var(--safe-top) + 1.5rem) 1.5rem calc(var(--safe-bottom) + 90px) 1.5rem; max-width: 800px; margin: 0 auto; width: 100%; }
+        .view-section { display: none; animation: fadeIn 0.3s ease; }
+        .view-section.active { display: flex; flex-direction: column; min-height: 100%; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+        h2 { font-size: 1.4rem; font-weight: 600; color: var(--text-main); }
+        .card { background: var(--surface-color); border-radius: 24px; padding: 1.5rem; box-shadow: var(--shadow-soft); margin-bottom: 1.5rem; transition: background-color 0.3s; }
+
+        .btn-icon { background: none; border: none; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-main); transition: background 0.2s; }
+        .btn-icon:active { background: var(--input-bg); }
+        .btn-icon svg { width: 24px; height: 24px; stroke-width: 2; stroke: currentColor; fill: none; stroke-linecap: round; }
+
+        /* --- 网格与气泡 --- */
+        .book-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 1.2rem; margin-top: 1rem; }
+        .book-bubble { aspect-ratio: 3 / 4; border-radius: 20px; padding: 1.5rem; display: flex; flex-direction: column; justify-content: flex-end; box-shadow: var(--shadow-soft); cursor: pointer; transition: transform 0.2s; color: #4A4641; position: relative; overflow: hidden; }
+        .book-bubble:active { transform: scale(0.95); }
+        .book-title-text { font-size: 1.1rem; font-weight: 600; line-height: 1.3; margin-bottom: 0.5rem; position: relative; z-index: 2; }
+        .book-meta { font-size: 0.8rem; opacity: 0.7; position: relative; z-index: 2; }
+        .btn-delete-book { position: absolute; top: 12px; right: 12px; width: 26px; height: 26px; background: rgba(0,0,0,0.1); color: white; border: none; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 10; font-size: 16px; }
+
+        /* 模态框通用 */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); backdrop-filter: blur(5px); display: none; align-items: center; justify-content: center; z-index: 1000; opacity: 0; transition: opacity 0.3s; }
+        .modal-overlay.active { display: flex; opacity: 1; }
+        .modal-card { background: var(--surface-color); width: 85%; max-width: 400px; border-radius: 24px; padding: 2rem; transform: scale(0.9); transition: transform 0.3s, background-color 0.3s; display: flex; flex-direction: column; max-height: 90vh; overflow-y: auto;}
+        .modal-overlay.active .modal-card { transform: scale(1); }
+        .modal-card h3 { margin-bottom: 1.5rem; font-size: 1.2rem; text-align: center; }
+        .modal-card input, .modal-card textarea { width: 100%; background: var(--input-bg); border: none; padding: 1rem 1.2rem; border-radius: 16px; font-size: 1rem; outline: none; margin-bottom: 1rem; color: var(--text-main); }
+        .modal-card textarea { resize: none; height: 80px; }
+        .modal-actions { display: flex; gap: 1rem; margin-top: 1rem;}
+        .btn-modal { flex: 1; padding: 1rem; border: none; border-radius: 16px; font-size: 1rem; font-weight: 600; cursor: pointer; }
+        .btn-cancel { background: var(--input-bg); color: var(--text-muted); }
+        .btn-confirm { background: var(--accent-primary); color: white; }
+
+        /* --- 工作区与全屏浮层 --- */
+        .workspace-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: var(--bg-color); z-index: 200; display: flex; flex-direction: column; transform: translateY(100%); transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+        .workspace-overlay.open { transform: translateY(0); }
+        .workspace-header { display: flex; justify-content: space-between; align-items: center; padding: calc(var(--safe-top) + 1rem) 1.5rem 1rem 1.5rem; background: var(--bg-color); z-index: 10; border-bottom: 1px solid rgba(0,0,0,0.05); }
+        .btn-text { background: none; border: none; font-size: 1.05rem; color: var(--text-muted); font-weight: 500; cursor: pointer; }
+        .workspace-title { font-weight: 600; font-size: 1.1rem; display: flex; flex-direction: column; align-items: center; }
+        .word-count-badge { font-size: 0.7rem; color: var(--text-muted); font-weight: normal; margin-top: 2px; }
+        .workspace-body { flex: 1; overflow-y: auto; padding: 1rem 1.5rem calc(var(--safe-bottom) + 90px) 1.5rem; }
+        .workspace-tab-content { display: none; animation: fadeIn 0.3s; height: 100%; }
+        .workspace-tab-content.active { display: flex; flex-direction: column; }
+        
+        /* 工作区底栏调整为平均分布4个栏目 */
+        .workspace-bottom-nav { position: absolute; bottom: 0; left: 0; width: 100%; background: var(--surface-color); border-top: 1px solid rgba(0,0,0,0.05); display: flex; justify-content: space-around; align-items: flex-start; padding-top: 15px; padding-bottom: calc(var(--safe-bottom) + 10px); z-index: 20; }
+        .ws-nav-item { padding: 0.6rem 0.8rem; border-radius: 20px; font-size: 0.95rem; font-weight: 600; color: var(--text-muted); transition: all 0.2s; cursor: pointer; text-align: center; }
+        .ws-nav-item.active { background: var(--input-bg); color: var(--text-main); }
+
+        /* 写作模块 */
+        .editor-container { display: flex; flex-direction: column; gap: 1rem; flex: 1; position: relative;}
+        .prompt-box textarea { width: 100%; height: 90px; padding: 1.2rem; border-radius: 20px; background-color: var(--input-bg); border: none; resize: none; outline: none; font-size: 1rem; line-height: 1.5; margin-bottom: 0.5rem; color: var(--text-main); }
+        .blocks-container { flex: 1; background-color: var(--surface-color); border-radius: 24px; padding: 1.5rem; box-shadow: var(--shadow-soft); overflow-y: auto; min-height: 300px; }
+        .draft-block { padding: 0.5rem; border-radius: 12px; line-height: 1.8; outline: none; transition: background 0.2s; min-height: 100%; }
+        .btn-generate { width: 100%; background: var(--accent-primary); color: white; border: none; padding: 1rem; border-radius: 20px; font-weight: 600; cursor: pointer; transition: opacity 0.2s;}
+        .btn-generate:disabled { opacity: 0.6; cursor: not-allowed; }
+        
+        .bg-form-group { display: flex; flex-direction: column; gap: 0.8rem; height: 100%; }
+        .bg-form-group label { font-size: 1rem; font-weight: 600; color: var(--text-main); margin-left: 0.5rem; }
+        .bg-form-group textarea { background: var(--input-bg); border: none; border-radius: 20px; padding: 1.2rem; font-size: 0.95rem; line-height: 1.6; color: var(--text-main); outline: none; resize: none; flex: 1; margin-bottom: 1.5rem; }
+
+        /* 角色卡片模块 */
+        .char-item { background: var(--surface-color); border-radius: 20px; padding: 1.5rem; box-shadow: var(--shadow-soft); margin-bottom: 1rem; position: relative; display: flex; flex-direction: column; gap: 0.4rem;}
+        .char-item h4 { color: var(--accent-primary); font-size: 1.2rem; border-bottom: 1px solid var(--input-bg); padding-bottom: 0.5rem; margin-bottom: 0.5rem;}
+        .char-item p { font-size: 0.9rem; color: var(--text-main); line-height: 1.5;}
+        .char-item span { color: var(--text-muted); font-weight: 600; display: inline-block; width: 50px;}
+        .btn-del-char { position: absolute; top: 1.5rem; right: 1.5rem; background: rgba(217, 83, 79, 0.1); color: var(--accent-danger); border: none; border-radius: 12px; padding: 0.3rem 0.8rem; font-size: 0.8rem; font-weight: bold; cursor: pointer; }
+
+        /* 章节列表模块 */
+        .chapter-list { display: flex; flex-direction: column; gap: 1rem; padding-bottom: 2rem; }
+        .chapter-item { background: var(--surface-color); border-radius: 16px; padding: 1.2rem; box-shadow: var(--shadow-soft); display: flex; flex-direction: column; gap: 0.8rem; }
+        .chapter-info h4 { color: var(--text-main); margin-bottom: 0.5rem;}
+        .chapter-summary { background: var(--input-bg); padding: 0.8rem; border-radius: 12px; font-size: 0.85rem; color: var(--text-muted); line-height: 1.5;}
+        .chapter-actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
+        .chapter-actions button { padding: 0.5rem 1rem; border: none; border-radius: 12px; font-size: 0.9rem; font-weight: 500; cursor: pointer; }
+        .btn-edit-ch { background: var(--input-bg); color: var(--text-main); }
+        .btn-del-ch { background: rgba(217, 83, 79, 0.1); color: var(--accent-danger); }
+
+        /* AI 划词悬浮工具栏 */
+        .ai-float-toolbar { position: absolute; display: none; background: var(--text-main); color: var(--surface-color); padding: 8px 12px; border-radius: 12px; font-size: 0.9rem; font-weight: 600; cursor: pointer; box-shadow: 0 8px 16px rgba(0,0,0,0.2); z-index: 100; transform: translateY(-40px); }
+        .ai-float-toolbar:active { transform: translateY(-38px) scale(0.95); }
+        .ai-float-toolbar::after { content: ''; position: absolute; bottom: -6px; left: 50%; margin-left: -6px; border-width: 6px 6px 0; border-style: solid; border-color: var(--text-main) transparent transparent transparent; }
+
+        /* --- 阅读器层 --- */
+        .reader-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: var(--surface-color); z-index: 200; display: flex; flex-direction: column; transform: translateX(100%); transition: transform 0.3s ease; }
+        .reader-overlay.open { transform: translateX(0); }
+        .reader-header { display: flex; align-items: center; padding: calc(var(--safe-top) + 1rem) 1.5rem 1rem 1.5rem; border-bottom: 1px solid var(--input-bg); }
+        .reader-title { flex: 1; text-align: center; font-weight: 600; font-size: 1.1rem; margin-right: 40px; }
+        .reader-content { flex: 1; overflow-y: auto; padding: 2rem; font-size: 1.15rem; line-height: 2; color: var(--text-main); text-align: justify; padding-bottom: calc(var(--safe-bottom) + 90px); }
+        .reader-chapter-title { font-size: 1.4rem; font-weight: bold; margin-bottom: 1.5rem; color: var(--accent-primary); text-align: center; }
+        .reader-bottom-nav { position: absolute; bottom: 0; left: 0; width: 100%; height: calc(var(--nav-height) + var(--safe-bottom)); background: var(--surface-color); border-top: 1px solid var(--input-bg); display: flex; justify-content: space-between; align-items: flex-start; padding: 15px 30px 0; z-index: 10; }
+        .reader-nav-btn { background: none; border: none; font-size: 1.05rem; color: var(--text-main); font-weight: 600; cursor: pointer; }
+        .reader-nav-btn:disabled { color: var(--text-muted); opacity: 0.4; cursor: not-allowed; }
+
+        /* 目录弹窗 */
+        .toc-list { display: flex; flex-direction: column; max-height: 60vh; overflow-y: auto; }
+        .toc-item { padding: 1.2rem 1rem; border-bottom: 1px solid var(--input-bg); font-size: 1rem; color: var(--text-main); cursor: pointer; }
+
+        /* --- 主 App 底部导航 --- */
+        .main-bottom-nav { position: fixed; bottom: 0; left: 0; width: 100%; background: var(--surface-color); border-top: 1px solid var(--input-bg); display: flex; justify-content: space-around; align-items: center; padding-top: 12px; padding-bottom: calc(var(--safe-bottom) + 8px); z-index: 100; }
+        .nav-item { display: flex; flex-direction: column; align-items: center; gap: 4px; color: var(--text-muted); font-size: 0.75rem; font-weight: 500; width: 33%; cursor: pointer; }
+        .nav-icon { width: 28px; height: 28px; background-color: var(--text-muted); border-radius: 10px; opacity: 0.3; transition: all 0.2s; }
+        .nav-item.active { color: var(--accent-primary); }
+        .nav-item.active .nav-icon { background-color: var(--accent-primary); opacity: 1; transform: translateY(-2px); }
+
+        /* --- 配置与表单 --- */
+        .form-group { display: flex; flex-direction: column; gap: 0.6rem; margin-bottom: 1.5rem; }
+        .form-group label { font-size: 0.9rem; font-weight: 500; color: var(--text-muted); margin-left: 0.5rem; }
+        select, textarea.cfg-input { background: var(--input-bg); border: 2px solid transparent; border-radius: 20px; padding: 1.2rem; font-size: 1rem; color: var(--text-main); outline: none; }
+        .model-input { width: 100%; background: var(--input-bg); border: 2px solid transparent; border-radius: 20px; padding: 1.2rem; font-size: 1.1rem; font-weight: 600; color: var(--accent-primary); outline: none; text-align: center; margin-bottom: 0.5rem;}
+        .model-chips { display: flex; flex-wrap: wrap; gap: 0.8rem; }
+        .chip { background: var(--input-bg); border: none; padding: 0.7rem 1.2rem; border-radius: 20px; color: var(--text-muted); font-size: 0.95rem; cursor: pointer; }
+        .chip.active { background: var(--text-main); color: var(--surface-color); }
+        .btn-large { background: var(--accent-green); color: white; border: none; padding: 1.2rem; border-radius: 24px; width: 100%; font-size: 1.1rem; font-weight: 600; cursor: pointer; margin-top: 1rem; }
+        .flex-row { display: flex; gap: 1rem; margin-top: 1rem; }
+        .btn-outline { background: transparent; border: 2px solid var(--text-muted); color: var(--text-muted); padding: 1rem; border-radius: 20px; flex: 1; font-weight: 600; cursor: pointer; text-align: center; }
+    </style>
+</head>
+<body>
+
+    <main class="content-area">
+        <!-- 1. 创作区 -->
+        <section id="creator-view" class="view-section active">
+            <header>
+                <h2>写作</h2>
+                <button id="btn-show-add-modal" class="btn-icon"><svg viewBox="0 0 24 24"><path d="M12 5v14m-7-7h14"></path></svg></button>
+            </header>
+            <div id="creator-grid" class="book-grid"></div>
+        </section>
+
+        <!-- 2. 书架区 -->
+        <section id="bookshelf-view" class="view-section">
+            <header><h2>书架</h2></header>
+            <div id="bookshelf-grid" class="book-grid"></div>
+            <div id="empty-bookshelf-hint" style="text-align:center; color: var(--text-muted); margin-top: 2rem;">暂无藏书。请在创作区保存章节后同步至此。</div>
+        </section>
+
+        <!-- 3. 配置区 -->
+        <section id="settings-view" class="view-section">
+            <header><h2>设置</h2></header>
+            <div class="card">
+                <div class="form-group" style="flex-direction: row; justify-content: space-between; align-items: center;">
+                    <label style="margin: 0;">夜间模式 (Dark Mode)</label>
+                    <input type="checkbox" id="toggle-dark-mode" style="width: 20px; height: 20px;">
+                </div>
+                <div class="form-group">
+                    <label>密钥</label>
+                    <select id="key-select"></select>
+                </div>
+                <div class="form-group">
+                    <label>密钥库</label>
+                    <textarea id="keystore-input" class="cfg-input" rows="3" placeholder="0001=AIzaSy...\n0002=AIzaSy..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label>模型</label>
+                    <input type="text" id="current-model-input" class="model-input" value="gemini-3.5-flash-lite">
+                    <div class="model-chips">
+                        <button class="chip active" data-model="gemini-3.5-flash-lite">3.5-flash-lite</button>
+                        <button class="chip" data-model="gemini-3.5-flash">3.5-flash</button>
+						<button class="chip" data-model="gemini-3.6-flash">3.6-flash</button>
+						<button class="chip" data-model="gemini-3.7-flash">3.7-flash</button>
+                    </div>
+                </div>
+                <button id="btn-settings-save" class="btn-large">保存设置</button>
+                <div class="flex-row">
+                    <button id="btn-export-json" class="btn-outline">备份数据</button>
+                    <label class="btn-outline" style="margin:0;">恢复数据<input type="file" id="file-import-json" accept=".json" style="display: none;"></label>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <nav class="main-bottom-nav" id="main-nav">
+        <div class="nav-item active" data-target="creator"><div class="nav-icon"></div><span>写作</span></div>
+        <div class="nav-item" data-target="bookshelf"><div class="nav-icon"></div><span>书架</span></div>
+        <div class="nav-item" data-target="settings"><div class="nav-icon"></div><span>设置</span></div>
+    </nav>
+
+    <!-- ==================== 工作区主层 ==================== -->
+    <div id="workspace-overlay" class="workspace-overlay">
+        <div class="workspace-header">
+            <button id="btn-close-ws" class="btn-text">〈 返回</button>
+            <div class="workspace-title">
+                <span id="ws-title">书名</span>
+                <span id="ws-word-count" class="word-count-badge">草稿: 0 字</span>
+            </div>
+            <button id="btn-save-chapter" class="btn-text" style="color: var(--accent-green); font-weight: 600;">保存</button>
+        </div>
+        <div class="workspace-body">
+            <!-- 栏目1：写作 -->
+            <div id="ws-tab-write" class="workspace-tab-content active">
+                <div class="editor-container" id="editor-container-box">
+                    <div class="card prompt-box" style="margin-bottom: 0;">
+                        <textarea id="ai-prompt-input" placeholder="输入本章走向... (系统将自动注入角色档案与前情记忆)"></textarea>
+                        <button id="btn-generate" class="btn-generate">✨ 连线大模型生成</button>
+                    </div>
+                    <div id="draft-blocks" class="blocks-container" contenteditable="true"></div>
+                    <div id="ai-float-toolbar" class="ai-float-toolbar">✨ AI 润色选中段落</div>
+                </div>
+            </div>
+            <!-- 栏目2：背景 -->
+            <div id="ws-tab-bg" class="workspace-tab-content">
+                <div class="bg-form-group">
+                    <label>剧情背景 (World Background)</label>
+                    <textarea id="world-bg-input" placeholder="描述世界运转规律或大纲..."></textarea>
+                    <label>写作规则 (Writing Rules)</label>
+                    <textarea id="writing-rules-input" placeholder="例如：1. 增加环境描写；2. 文风冷酷..." style="flex: 0.6"></textarea>
+                </div>
+            </div>
+            <!-- 栏目3：角色 (NEW) -->
+            <div id="ws-tab-chars" class="workspace-tab-content">
+                <button id="btn-show-add-char" class="btn-large" style="margin-bottom: 1.5rem; margin-top: 0; background: var(--accent-primary);">+ 添加角色设定</button>
+                <div id="char-list-container" style="padding-bottom: 2rem;"></div>
+            </div>
+            <!-- 栏目4：章节管理 (更新前情提要展示) -->
+            <div id="ws-tab-chapters" class="workspace-tab-content">
+                <div id="chapter-list-container" class="chapter-list"></div>
+            </div>
+        </div>
+        <div class="workspace-bottom-nav">
+            <div class="ws-nav-item active" data-ws-target="write">写作</div>
+            <div class="ws-nav-item" data-ws-target="bg">背景</div>
+            <div class="ws-nav-item" data-ws-target="chars">角色</div>
+            <div class="ws-nav-item" data-ws-target="chapters">章节</div>
+        </div>
+    </div>
+
+    <!-- 角色添加/编辑弹窗 -->
+    <div id="char-modal" class="modal-overlay" style="z-index: 250;">
+        <div class="modal-card">
+            <h3 id="char-modal-title">添加角色</h3>
+            <input type="text" id="char-name" placeholder="角色姓名 (如: 顾清寒)" autocomplete="off">
+            <input type="text" id="char-role" placeholder="身份定位 (如: 男主/反派/师尊)" autocomplete="off">
+            <textarea id="char-appearance" placeholder="外貌特征 (如: 桃花眼、冷白皮、银色长发)"></textarea>
+            <textarea id="char-personality" placeholder="性格特点 (如: 表面清冷寡言，内心极度偏执)"></textarea>
+            <textarea id="char-relation" placeholder="与主角的关系或态度 (如: 暗恋女主但嘴硬)"></textarea>
+            <div class="modal-actions">
+                <button id="btn-cancel-char" class="btn-modal btn-cancel">取消</button>
+                <button id="btn-confirm-char" class="btn-modal btn-confirm">保存角色</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 章节修改子页面 -->
+    <div id="edit-chapter-overlay" class="workspace-overlay" style="z-index: 250;">
+        <div class="workspace-header">
+            <button id="btn-cancel-edit-ch" class="btn-text">〈 返回</button>
+            <div id="edit-ch-title" class="workspace-title">修改章节</div>
+            <button id="btn-save-edit-ch" class="btn-text" style="color: var(--accent-green); font-weight: 600;">更新</button>
+        </div>
+        <div class="workspace-body" style="display: flex; flex-direction: column; padding: 1.5rem; padding-bottom: calc(var(--safe-bottom) + 20px);">
+            <textarea id="edit-ch-content" style="flex: 1; resize: none; background: var(--input-bg); border-radius: 20px; padding: 1.5rem; border: none; outline: none; font-size: 1.1rem; line-height: 1.8; color: var(--text-main);"></textarea>
+        </div>
+    </div>
+
+    <!-- 阅读器层 -->
+    <div id="reader-overlay" class="reader-overlay">
+        <div class="reader-header">
+            <button id="btn-close-reader" class="btn-text">〈 书架</button>
+            <div id="reader-book-title" class="reader-title">书名</div>
+            <button id="btn-export-txt" class="btn-text" style="color: var(--accent-primary);">导出TXT</button>
+        </div>
+        <div id="reader-content" class="reader-content"></div>
+        <div class="reader-bottom-nav">
+            <button id="btn-reader-prev" class="reader-nav-btn">上一章</button>
+            <button id="btn-reader-toc" class="reader-nav-btn">目录</button>
+            <button id="btn-reader-next" class="reader-nav-btn">下一章</button>
+        </div>
+    </div>
+
+    <!-- 目录与新建书籍弹窗 -->
+    <div id="toc-modal" class="modal-overlay" style="z-index: 250;">
+        <div class="modal-card" style="padding: 1.5rem 0;">
+            <h3 style="margin-bottom: 1rem;">目录</h3>
+            <div id="toc-list" class="toc-list"></div>
+            <div style="padding: 0 1.5rem; margin-top: 1rem;"><button class="btn-modal btn-cancel" style="width: 100%;" onclick="document.getElementById('toc-modal').classList.remove('active')">关闭</button></div>
+        </div>
+    </div>
+    <div id="add-book-modal" class="modal-overlay">
+        <div class="modal-card">
+            <h3>开启新故事</h3>
+            <input type="text" id="new-book-title" placeholder="输入书名..." autocomplete="off">
+            <div class="modal-actions">
+                <button id="btn-cancel-modal" class="btn-modal btn-cancel">取消</button>
+                <button id="btn-confirm-modal" class="btn-modal btn-confirm">创建</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const MORANDI_COLORS = ['#E3D5CA', '#D6E0D9', '#E8D5D5', '#D5DFE5', '#DED7C8', '#D3C9C9'];
+        let libraryData = {};
+        let currentEditingBookId = null;
+        let db;
+
+        // 状态变量
+        let currentReaderBookId = null;
+        let currentReaderChapterIndex = 0;
+        let editingChapterIndex = -1;
+        let editingCharIndex = -1;
+        let currentSelectedRange = null;
+
+        // --- 数据库操作 (IndexedDB) ---
+        const initDB = () => {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open('MorandiWriterDB', 2); // 升级版本号
+                request.onupgradeneeded = (e) => {
+                    if (!e.target.result.objectStoreNames.contains('books')) 
+                        e.target.result.createObjectStore('books', { keyPath: 'id' });
+                };
+                request.onsuccess = (e) => resolve(e.target.result);
+                request.onerror = (e) => reject(e.target.error);
+            });
+        };
+        const loadBooksFromDB = () => {
+            return new Promise((resolve) => {
+                const tx = db.transaction(['books'], 'readonly');
+                const req = tx.objectStore('books').getAll();
+                req.onsuccess = () => {
+                    const data = {};
+                    // 兼容旧数据结构，植入新的默认数组
+                    req.result.forEach(b => {
+                        b.characters = b.characters || [];
+                        b.chapterSummaries = b.chapterSummaries || [];
+                        data[b.id] = b;
+                    });
+                    resolve(data);
+                };
+            });
+        };
+        const saveBookToDB = (bookData) => {
+            return new Promise((resolve) => {
+                const tx = db.transaction(['books'], 'readwrite');
+                tx.objectStore('books').put(bookData);
+                tx.oncomplete = () => resolve();
+            });
+        };
+        const deleteBookFromDB = (bookId) => {
+            return new Promise((resolve) => {
+                const tx = db.transaction(['books'], 'readwrite');
+                tx.objectStore('books').delete(bookId);
+                tx.oncomplete = () => resolve();
+            });
+        };
+
+        function getWordCount(htmlStr) {
+            let tmp = document.createElement("DIV"); tmp.innerHTML = htmlStr;
+            return (tmp.textContent || tmp.innerText || "").replace(/\s+/g, '').length;
+        }
+
+        function autoSaveDraft() {
+            if(!currentEditingBookId) return;
+            const draft = { prompt: document.getElementById('ai-prompt-input').value, content: document.getElementById('draft-blocks').innerHTML };
+            localStorage.setItem('draft_' + currentEditingBookId, JSON.stringify(draft));
+            document.getElementById('ws-word-count').innerText = `草稿: ${getWordCount(draft.content)} 字`;
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            
+            // --- 1. 配置加载与夜间模式 ---
+            const keySelect = document.getElementById('key-select');
+            for(let i = 1; i <= 30; i++) keySelect.add(new Option(i.toString().padStart(4, '0')));
+            
+            const saved = localStorage.getItem('morandi_settings');
+            if (saved) {
+                const config = JSON.parse(saved);
+                if(config.keySelect) keySelect.value = config.keySelect;
+                if(config.keystore) document.getElementById('keystore-input').value = config.keystore;
+                if(config.model) {
+                    document.getElementById('current-model-input').value = config.model;
+                    document.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c.getAttribute('data-model') === config.model));
+                }
+                if(config.darkMode) {
+                    document.body.classList.add('dark-mode');
+                    document.getElementById('toggle-dark-mode').checked = true;
+                }
+            }
+
+            document.getElementById('toggle-dark-mode').addEventListener('change', (e) => {
+                if(e.target.checked) document.body.classList.add('dark-mode');
+                else document.body.classList.remove('dark-mode');
+            });
+
+            // 初始化 DB
+            try { db = await initDB(); libraryData = await loadBooksFromDB(); renderCreatorGrid(); renderBookshelfGrid(); } catch(e) { console.error("DB Error", e); }
+
+            // --- 2. 基础导航与新建书籍 ---
+            document.querySelectorAll('#main-nav .nav-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    document.querySelectorAll('#main-nav .nav-item, .content-area .view-section').forEach(el => el.classList.remove('active'));
+                    item.classList.add('active');
+                    document.getElementById(item.getAttribute('data-target') + '-view').classList.add('active');
+                });
+            });
+
+            document.getElementById('btn-show-add-modal').addEventListener('click', () => { document.getElementById('new-book-title').value = ''; document.getElementById('add-book-modal').classList.add('active'); });
+            document.getElementById('btn-cancel-modal').addEventListener('click', () => document.getElementById('add-book-modal').classList.remove('active'));
+            document.getElementById('btn-confirm-modal').addEventListener('click', async () => {
+                const title = document.getElementById('new-book-title').value.trim();
+                if (title) {
+                    const bookId = 'book_' + Date.now();
+                    libraryData[bookId] = { id: bookId, title: title, color: MORANDI_COLORS[Math.floor(Math.random() * MORANDI_COLORS.length)], chapters: [], chapterSummaries: [], characters: [], worldBg: "", writingRules: "" };
+                    await saveBookToDB(libraryData[bookId]);
+                    renderCreatorGrid(); document.getElementById('add-book-modal').classList.remove('active');
+                }
+            });
+
+            // 工作区导航
+            document.querySelectorAll('.ws-nav-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    document.querySelectorAll('.ws-nav-item, .workspace-tab-content').forEach(el => el.classList.remove('active'));
+                    item.classList.add('active');
+                    const target = item.getAttribute('data-ws-target');
+                    document.getElementById('ws-tab-' + target).classList.add('active');
+                    if(target === 'chapters') renderChapterList();
+                    if(target === 'chars') renderCharList();
+                });
+            });
+            document.getElementById('btn-close-ws').addEventListener('click', () => { document.getElementById('workspace-overlay').classList.remove('open'); currentEditingBookId = null; });
+
+            document.getElementById('ai-prompt-input').addEventListener('input', autoSaveDraft);
+            document.getElementById('draft-blocks').addEventListener('input', autoSaveDraft);
+
+            // --- 3. 角色管理 (CRUD) ---
+            document.getElementById('btn-show-add-char').addEventListener('click', () => {
+                editingCharIndex = -1;
+                document.getElementById('char-modal-title').innerText = '添加角色';
+                ['name', 'role', 'appearance', 'personality', 'relation'].forEach(id => document.getElementById('char-'+id).value = '');
+                document.getElementById('char-modal').classList.add('active');
+            });
+            document.getElementById('btn-cancel-char').addEventListener('click', () => document.getElementById('char-modal').classList.remove('active'));
+            document.getElementById('btn-confirm-char').addEventListener('click', async () => {
+                const name = document.getElementById('char-name').value.trim();
+                if(!name) return alert("角色姓名不能为空");
+                
+                const charData = {
+                    name,
+                    role: document.getElementById('char-role').value.trim(),
+                    appearance: document.getElementById('char-appearance').value.trim(),
+                    personality: document.getElementById('char-personality').value.trim(),
+                    relation: document.getElementById('char-relation').value.trim()
+                };
+
+                const book = libraryData[currentEditingBookId];
+                if(editingCharIndex === -1) book.characters.push(charData);
+                else book.characters[editingCharIndex] = charData;
+                
+                await saveBookToDB(book);
+                document.getElementById('char-modal').classList.remove('active');
+                renderCharList();
+            });
+
+            // --- 4. 连线大模型 (顶级人设 + 角色库 + 动态剧情记忆) ---
+            document.getElementById('btn-generate').addEventListener('click', async function() {
+                const activeId = document.getElementById('key-select').value;
+                const foundKey = document.getElementById('keystore-input').value.split('\n').find(l => l.trim().startsWith(activeId + '='))?.split('=')[1].trim();
+                if(!foundKey) return alert("请先在【配置】中填写 API Key！");
+
+                const model = document.getElementById('current-model-input').value;
+                const book = libraryData[currentEditingBookId];
+                
+                // 【拼接：动态剧情总纲】
+                let summaryContext = "";
+                if(book.chapterSummaries && book.chapterSummaries.length > 0) {
+                    summaryContext = "\n\n【前情总纲 (你必须记住这些已发生的情节)】：\n" + book.chapterSummaries.map((s, i) => `第${i+1}章：${s}`).join('\n');
+                }
+
+                // 【拼接：上一章结尾记忆】
+                let previousContext = "";
+                if(book.chapters.length > 0) {
+                    const lastChap = book.chapters[book.chapters.length - 1];
+                    previousContext = "\n\n【上一章结尾(紧接此剧情往下写)】：\n" + lastChap.replace(/<[^>]+>/g, '').slice(-800);
+                }
+
+                // 【拼接：专属角色档案】
+                let charContext = "";
+                if(book.characters && book.characters.length > 0) {
+                    charContext = "\n\n【核心出场角色档案 (严格保持人设)】：\n" + book.characters.map(c => `- ${c.name} (${c.role}): 外貌[${c.appearance}], 性格[${c.personality}], 关系[${c.relation}]`).join('\n');
+                }
+
+                const sys = `你现在是一位处于创作巅峰期的顶级畅销言情小说大神，深谙现代读者的阅读节奏，同时具备极高的文学素养与电影级的画面刻画能力。你极其擅长拿捏暧昧张力、情感拉扯，文风苏撩、细腻且深邃。
+                
+                请严格基于以下设定和前文，续写小说正文：
+                【世界背景】：${document.getElementById('world-bg-input').value}
+                【专属规则】：${document.getElementById('writing-rules-input').value}${previousContext}
+                
+                作为顶级言情作家，你必须绝对遵守以下【四大铁律】：
+                1. 错落有致的“呼吸感”排版：完美融合轻快与厚重，平时必须切碎段落（单句或两三句成段，有人说话必换行）；需要长篇幅描写时，允许段落稍长，但也必须适时拆解，保持视觉清爽。
+                2. 丰满立体的心理拉扯：绝不能只写干瘪的对话。必须深入角色的内心世界，写出言辞背后的心理波动。极其善于营造“表里不一”的错位张力。
+                3. “电影镜头式”的细节展示：用环境与微动作烘托情绪。巧妙穿插光影偏移、温度变化等五感描写。
+                4. 绝对沉浸与零废话：你现在就是在直接输出即将发布的VIP章节正文。**严禁**输出任何“好的”、“没问题”、“为您生成正文”等暴露AI身份的解释性废话，摒弃客套，直接起笔写小说。`;
+
+                const usr = `【本章剧情走向】：${document.getElementById('ai-prompt-input').value}\n直接开始正文创作。`;
+
+                this.innerText = 'AI 思考中...';
+                document.getElementById('draft-blocks').innerHTML = '<div class="draft-block" style="text-align: center; color:var(--text-muted);">正在加载角色库与前情大纲...</div>';
+
+                try {
+                    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${foundKey}`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: sys + "\n\n" + usr }] }] })
+                    });
+                    if (!res.ok) throw new Error("API请求失败");
+                    const data = await res.json();
+                    const text = data.candidates[0].content.parts[0].text;
+                    const html = text.split('\n').filter(p => p.trim() !== '').map(p => `<p style="margin-bottom:1em; text-indent: 2em;">${p}</p>`).join('');
+                    document.getElementById('draft-blocks').innerHTML = html;
+                    autoSaveDraft(); 
+                } catch (e) {
+                    document.getElementById('draft-blocks').innerHTML = `<div style="color:var(--accent-danger);">生成失败: ${e.message}</div>`;
+                } finally { this.innerText = '✨ 重新生成'; }
+            });
+
+            // --- 5. 保存并自动生成摘要 (Rolling Summary) ---
+            document.getElementById('btn-save-chapter').addEventListener('click', async function() {
+                if(!currentEditingBookId) return;
+                const draftBox = document.getElementById('draft-blocks');
+                const textHTML = draftBox.innerHTML.trim(); 
+                const pureText = draftBox.innerText.trim();
+                
+                if(!textHTML || getWordCount(textHTML) < 10) return alert("没有实质内容，无法保存！");
+
+                const activeId = document.getElementById('key-select').value;
+                const foundKey = document.getElementById('keystore-input').value.split('\n').find(l => l.trim().startsWith(activeId + '='))?.split('=')[1].trim();
+                
+                const book = libraryData[currentEditingBookId];
+                book.worldBg = document.getElementById('world-bg-input').value;
+                book.writingRules = document.getElementById('writing-rules-input').value;
+
+                let summary = "（暂无提要，可手动修改补充）"; // 默认摘要
+
+                // 如果有API，则在后台静默请求AI提取摘要
+                if(foundKey) {
+                    this.innerText = '提炼剧情中...';
+                    this.disabled = true;
+                    try {
+                        const model = document.getElementById('current-model-input').value;
+                        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${foundKey}`, {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: `请将以下小说段落浓缩成不超过 40 字的核心剧情摘要（作为以后大模型续写的记忆点）。只输出摘要纯文本，严禁包含任何废话：\n\n"${pureText.slice(0, 1500)}"` }] }] })
+                        });
+                        if (res.ok) {
+                            const data = await res.json();
+                            summary = data.candidates[0].content.parts[0].text.replace(/\n/g, '');
+                        }
+                    } catch(e) { console.error("Summary Gen Error", e); }
+                    this.innerText = '保存';
+                    this.disabled = false;
+                }
+
+                book.chapters.push(textHTML);
+                book.chapterSummaries.push(summary);
+                
+                await saveBookToDB(book);
+                localStorage.removeItem('draft_' + currentEditingBookId);
+                document.getElementById('ai-prompt-input').value = '';
+                draftBox.innerHTML = '';
+                document.getElementById('ws-word-count').innerText = `草稿: 0 字`;
+                
+                alert(`已保存为第 ${book.chapters.length} 章！\n自动提取摘要：${summary}`);
+                renderCreatorGrid(); renderBookshelfGrid();
+                if(document.getElementById('ws-tab-chapters').classList.contains('active')) renderChapterList();
+            });
+
+            // 划词重写
+            const toolbar = document.getElementById('ai-float-toolbar');
+            const draftBox = document.getElementById('draft-blocks');
+            document.addEventListener('selectionchange', () => {
+                const selection = window.getSelection();
+                if (!selection.isCollapsed && selection.rangeCount > 0 && draftBox.contains(selection.anchorNode)) {
+                    const range = selection.getRangeAt(0);
+                    const rect = range.getBoundingClientRect();
+                    const containerRect = document.getElementById('editor-container-box').getBoundingClientRect();
+                    toolbar.style.left = (rect.left - containerRect.left + rect.width / 2 - toolbar.offsetWidth / 2) + 'px';
+                    toolbar.style.top = (rect.top - containerRect.top) + 'px';
+                    toolbar.style.display = 'block';
+                    currentSelectedRange = range.cloneRange();
+                } else { setTimeout(() => { if(!toolbar.matches(':hover')) toolbar.style.display = 'none'; }, 100); }
+            });
+
+            toolbar.addEventListener('click', async () => {
+                if(!currentSelectedRange) return;
+                const selectedText = currentSelectedRange.toString();
+                const instruction = prompt("告诉 AI 如何修改这段话：\n(如：写得更血腥一点、把对话改幽默)", "润色这段文字，使其更生动");
+                if(!instruction) return;
+                
+                toolbar.style.display = 'none';
+                const activeId = document.getElementById('key-select').value;
+                const foundKey = document.getElementById('keystore-input').value.split('\n').find(l => l.trim().startsWith(activeId + '='))?.split('=')[1].trim();
+                if(!foundKey) return alert("请配置 API Key");
+                
+                try {
+                    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${document.getElementById('current-model-input').value}:generateContent?key=${foundKey}`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: `你是一个小说润色助手。请按照要求【${instruction}】重写以下段落，只输出结果，绝无废话：\n"${selectedText}"` }] }] })
+                    });
+                    const data = await res.json();
+                    const newText = data.candidates[0].content.parts[0].text.replace(/\n/g, '<br>');
+                    
+                    const selection = window.getSelection();
+                    selection.removeAllRanges(); selection.addRange(currentSelectedRange);
+                    document.execCommand('insertHTML', false, newText); autoSaveDraft();
+                } catch(e) { alert("重写失败"); }
+            });
+
+            // 导出与导入
+            document.getElementById('btn-export-txt').addEventListener('click', () => {
+                const book = libraryData[currentReaderBookId];
+                let txtContent = `《${book.title}》\n\n`;
+                book.chapters.forEach((ch, i) => {
+                    txtContent += `\n\n=== 第 ${i+1} 章 ===\n\n`;
+                    let tmp = document.createElement("DIV"); tmp.innerHTML = ch;
+                    txtContent += tmp.textContent || tmp.innerText;
+                });
+                const blob = new Blob([txtContent], { type: "text/plain;charset=utf-8" });
+                const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${book.title}.txt`; a.click();
+            });
+
+            document.getElementById('btn-export-json').addEventListener('click', () => {
+                const blob = new Blob([JSON.stringify(libraryData)], { type: "application/json" });
+                const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `Morandi_${Date.now()}.json`; a.click();
+            });
+
+            document.getElementById('file-import-json').addEventListener('change', (e) => {
+                const file = e.target.files[0]; if(!file) return;
+                const reader = new FileReader();
+                reader.onload = async (event) => {
+                    try {
+                        const importedData = JSON.parse(event.target.result);
+                        for(let id in importedData) { libraryData[id] = importedData[id]; await saveBookToDB(importedData[id]); }
+                        renderCreatorGrid(); renderBookshelfGrid(); alert("数据恢复成功！");
+                    } catch(err) { alert("文件格式错误，恢复失败"); }
+                }; reader.readAsText(file);
+            });
+
+            // 其他交互
+            document.getElementById('btn-cancel-edit-ch').addEventListener('click', () => document.getElementById('edit-chapter-overlay').classList.remove('open'));
+            document.getElementById('btn-save-edit-ch').addEventListener('click', async () => {
+                if(editingChapterIndex === -1) return;
+                const newText = document.getElementById('edit-ch-content').value;
+                const html = newText.split('\n').filter(p => p.trim() !== '').map(p => `<p style="margin-bottom:1em; text-indent: 2em;">${p}</p>`).join('');
+                libraryData[currentEditingBookId].chapters[editingChapterIndex] = html;
+                await saveBookToDB(libraryData[currentEditingBookId]);
+                document.getElementById('edit-chapter-overlay').classList.remove('open');
+                renderChapterList(); renderBookshelfGrid();
+            });
+
+            document.getElementById('btn-close-reader').addEventListener('click', () => document.getElementById('reader-overlay').classList.remove('open'));
+            document.getElementById('btn-reader-prev').addEventListener('click', () => { if(currentReaderChapterIndex > 0) { currentReaderChapterIndex--; renderReaderChapter(); }});
+            document.getElementById('btn-reader-next').addEventListener('click', () => { if(currentReaderChapterIndex < libraryData[currentReaderBookId].chapters.length - 1) { currentReaderChapterIndex++; renderReaderChapter(); }});
+            document.getElementById('btn-reader-toc').addEventListener('click', () => {
+                const list = document.getElementById('toc-list'); list.innerHTML = '';
+                libraryData[currentReaderBookId].chapters.forEach((_, i) => {
+                    const item = document.createElement('div'); item.className = 'toc-item'; item.innerText = `第 ${i + 1} 章`;
+                    if(i === currentReaderChapterIndex) item.style.color = 'var(--accent-primary)';
+                    item.onclick = () => { currentReaderChapterIndex = i; document.getElementById('toc-modal').classList.remove('active'); renderReaderChapter(); };
+                    list.appendChild(item);
+                });
+                document.getElementById('toc-modal').classList.add('active');
+            });
+
+            document.querySelectorAll('.chip').forEach(chip => {
+                chip.addEventListener('click', function() {
+                    document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+                    this.classList.add('active');
+                    document.getElementById('current-model-input').value = this.getAttribute('data-model');
+                });
+            });
+            document.getElementById('current-model-input').addEventListener('input', function() {
+                const v = this.value.trim();
+                document.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c.getAttribute('data-model') === v));
+            });
+            document.getElementById('btn-settings-save').addEventListener('click', function() {
+                localStorage.setItem('morandi_settings', JSON.stringify({ darkMode: document.getElementById('toggle-dark-mode').checked, keySelect: document.getElementById('key-select').value, keystore: document.getElementById('keystore-input').value, model: document.getElementById('current-model-input').value }));
+                this.innerText = '已保存 ✓'; setTimeout(() => this.innerText = '保存设置', 2000);
+            });
+        });
+
+        /* --- 渲染UI --- */
+        async function deleteBook(event, bookId) {
+            event.stopPropagation();
+            if(confirm("确定彻底删除这本书吗？(此操作不可逆)")) {
+                delete libraryData[bookId]; await deleteBookFromDB(bookId); localStorage.removeItem('draft_'+bookId);
+                renderCreatorGrid(); renderBookshelfGrid();
+            }
+        }
+
+        function renderCreatorGrid() {
+            const grid = document.getElementById('creator-grid'); grid.innerHTML = '';
+            Object.values(libraryData).reverse().forEach(book => {
+                let totalWords = 0; book.chapters.forEach(ch => totalWords += getWordCount(ch));
+                const bubble = document.createElement('div'); bubble.className = 'book-bubble'; bubble.style.backgroundColor = book.color;
+                bubble.innerHTML = `<button class="btn-delete-book" onclick="deleteBook(event, '${book.id}')">×</button><div class="book-title-text" style="${document.body.classList.contains('dark-mode')?'color:#262423;':''}">${book.title}</div><div class="book-meta" style="${document.body.classList.contains('dark-mode')?'color:#262423;':''}">已有 ${book.chapters.length} 章 / ${totalWords} 字</div>`;
+                bubble.onclick = () => openWorkspace(book.id); grid.appendChild(bubble);
+            });
+        }
+
+        function renderBookshelfGrid() {
+            const grid = document.getElementById('bookshelf-grid'); grid.innerHTML = ''; let hasBooks = false;
+            Object.values(libraryData).reverse().forEach(book => {
+                if(book.chapters.length > 0) {
+                    hasBooks = true; const bubble = document.createElement('div'); bubble.className = 'book-bubble'; bubble.style.backgroundColor = book.color;
+                    bubble.innerHTML = `<div class="book-title-text" style="${document.body.classList.contains('dark-mode')?'color:#262423;':''}">${book.title}</div><div class="book-meta" style="${document.body.classList.contains('dark-mode')?'color:#262423;':''}">全 ${book.chapters.length} 章</div>`;
+                    bubble.onclick = () => { currentReaderBookId = book.id; currentReaderChapterIndex = 0; renderReaderChapter(); document.getElementById('reader-overlay').classList.add('open'); };
+                    grid.appendChild(bubble);
+                }
+            });
+            document.getElementById('empty-bookshelf-hint').style.display = hasBooks ? 'none' : 'block';
+        }
+
+        // 渲染角色列表
+        function renderCharList() {
+            const container = document.getElementById('char-list-container'); container.innerHTML = '';
+            const book = libraryData[currentEditingBookId];
+            if(!book || !book.characters || book.characters.length === 0) return container.innerHTML = '<div style="text-align:center; color:var(--text-muted); margin-top: 1rem;">暂无角色档案</div>';
+            book.characters.forEach((char, index) => {
+                const item = document.createElement('div'); item.className = 'char-item';
+                item.innerHTML = `
+                    <button class="btn-del-char" onclick="deleteChar(${index})">删除</button>
+                    <h4 onclick="editChar(${index})" style="cursor:pointer;">${char.name} (${char.role}) ✎</h4>
+                    <p><span>外貌：</span>${char.appearance || '无'}</p>
+                    <p><span>性格：</span>${char.personality || '无'}</p>
+                    <p><span>关系：</span>${char.relation || '无'}</p>
+                `;
+                container.appendChild(item);
+            });
+        }
+        
+        window.editChar = function(index) {
+            editingCharIndex = index;
+            const char = libraryData[currentEditingBookId].characters[index];
+            document.getElementById('char-modal-title').innerText = '编辑角色';
+            document.getElementById('char-name').value = char.name;
+            document.getElementById('char-role').value = char.role;
+            document.getElementById('char-appearance').value = char.appearance;
+            document.getElementById('char-personality').value = char.personality;
+            document.getElementById('char-relation').value = char.relation;
+            document.getElementById('char-modal').classList.add('active');
+        };
+
+        window.deleteChar = async function(index) {
+            if(confirm("确定删除该角色吗？")) {
+                libraryData[currentEditingBookId].characters.splice(index, 1);
+                await saveBookToDB(libraryData[currentEditingBookId]);
+                renderCharList();
+            }
+        };
+
+        // 渲染章节列表 (现在加入了摘要显示)
+        function renderChapterList() {
+            const container = document.getElementById('chapter-list-container'); container.innerHTML = '';
+            const book = libraryData[currentEditingBookId];
+            if(!book || book.chapters.length === 0) return container.innerHTML = '<div style="text-align:center; color:var(--text-muted); margin-top: 2rem;">暂无保存的章节</div>';
+            book.chapters.forEach((text, index) => {
+                const item = document.createElement('div'); item.className = 'chapter-item';
+                const summary = book.chapterSummaries[index] || "暂无提要";
+                item.innerHTML = `
+                    <div class="chapter-info">
+                        <h4>第 ${index + 1} 章</h4>
+                        <div class="chapter-summary"><strong>AI 提要：</strong>${summary}</div>
+                    </div>
+                    <div class="chapter-actions">
+                        <button class="btn-edit-ch" onclick="openEditChapterView(${index})">修改正文</button>
+                        <button class="btn-del-ch" onclick="deleteChapter(${index})">删除</button>
+                    </div>
+                `;
+                container.appendChild(item);
+            });
+        }
+
+        function openEditChapterView(index) {
+            editingChapterIndex = index; document.getElementById('edit-ch-title').innerText = `修改 第 ${index + 1} 章`;
+            let tmp = document.createElement("DIV"); tmp.innerHTML = libraryData[currentEditingBookId].chapters[index];
+            document.getElementById('edit-ch-content').value = tmp.innerHTML.replace(/<p[^>]*>/g, '').replace(/<\/p>/g, '\n\n').trim();
+            document.getElementById('edit-chapter-overlay').classList.add('open');
+        }
+
+        async function deleteChapter(index) {
+            if(confirm(`确定要删除第 ${index + 1} 章吗？`)) {
+                libraryData[currentEditingBookId].chapters.splice(index, 1);
+                libraryData[currentEditingBookId].chapterSummaries.splice(index, 1);
+                await saveBookToDB(libraryData[currentEditingBookId]);
+                renderChapterList(); renderBookshelfGrid();
+            }
+        }
+
+        function openWorkspace(bookId) {
+            currentEditingBookId = bookId; const book = libraryData[bookId];
+            document.getElementById('ws-title').innerText = book.title;
+            document.getElementById('world-bg-input').value = book.worldBg || '';
+            document.getElementById('writing-rules-input').value = book.writingRules || '';
+            
+            const draft = localStorage.getItem('draft_' + bookId);
+            if(draft) {
+                const d = JSON.parse(draft);
+                document.getElementById('ai-prompt-input').value = d.prompt || '';
+                document.getElementById('draft-blocks').innerHTML = d.content || '';
+                document.getElementById('ws-word-count').innerText = `草稿: ${getWordCount(d.content)} 字`;
+            } else {
+                document.getElementById('ai-prompt-input').value = '';
+                document.getElementById('draft-blocks').innerHTML = '';
+                document.getElementById('ws-word-count').innerText = `草稿: 0 字`;
+            }
+
+            document.getElementById('workspace-overlay').classList.add('open');
+            document.querySelector('.ws-nav-item[data-ws-target="write"]').click();
+        }
+
+        function renderReaderChapter() {
+            const book = libraryData[currentReaderBookId];
+            document.getElementById('reader-book-title').innerText = book.title;
+            const contentBox = document.getElementById('reader-content');
+            if(book.chapters.length === 0) return;
+            contentBox.innerHTML = `<div class="reader-chapter-title">第 ${currentReaderChapterIndex + 1} 章</div>` + book.chapters[currentReaderChapterIndex];
+            contentBox.scrollTop = 0;
+            document.getElementById('btn-reader-prev').disabled = (currentReaderChapterIndex === 0);
+            document.getElementById('btn-reader-next').disabled = (currentReaderChapterIndex === book.chapters.length - 1);
+        }
+
+        if ('serviceWorker' in navigator) { window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(err => console.log('SW失败', err))); }
+    </script>
+</body>
+</html>

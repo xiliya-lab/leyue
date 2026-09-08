@@ -1,0 +1,20 @@
+{
+  "name": "乐阅",
+  "short_name": "乐阅",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#EAE7E0",
+  "theme_color": "#9EA7A6",
+  "icons": [
+    {
+      "src": "photo.JPG",
+      "sizes": "192x192",
+      "type": "image/jpeg"
+    },
+    {
+      "src": "photo.JPG",
+      "sizes": "512x512",
+      "type": "image/jpeg"
+    }
+  ]
+}
