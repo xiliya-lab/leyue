@@ -79,11 +79,29 @@
         .btn-text { background: none; border: none; font-size: 1.05rem; color: var(--text-muted); font-weight: 500; cursor: pointer; }
         .workspace-title { font-weight: 600; font-size: 1.1rem; display: flex; flex-direction: column; align-items: center; }
         .word-count-badge { font-size: 0.7rem; color: var(--text-muted); font-weight: normal; margin-top: 2px; }
-        .workspace-body { flex: 1; overflow-y: auto; padding: 1rem 1.5rem calc(var(--safe-bottom) + 90px) 1.5rem; }
-        .workspace-tab-content { display: none; animation: fadeIn 0.3s; height: 100%; }
-        .workspace-tab-content.active { display: flex; flex-direction: column; }
         
         /* 工作区底栏调整为平均分布4个栏目 */
+        /* --- 核心修复 1：将 body 改为 flex 容器，使其底部 padding 强制生效 --- */
+        .workspace-body { 
+            flex: 1; 
+            overflow-y: auto; 
+            padding: 1rem 1.5rem calc(var(--safe-bottom) + 90px) 1.5rem; 
+            display: flex; 
+            flex-direction: column; 
+        }
+
+        /* --- 核心修复 2：用 flex: 1 替代 height: 100%，防止子元素溢出被遮挡 --- */
+        .workspace-tab-content { 
+            display: none; 
+            animation: fadeIn 0.3s; 
+            flex: 1; 
+        }
+        .workspace-tab-content.active { 
+            display: flex; 
+            flex-direction: column; 
+        }
+        
+        /* 其他保持不变的底栏样式 */
         .workspace-bottom-nav { position: absolute; bottom: 0; left: 0; width: 100%; background: var(--surface-color); border-top: 1px solid rgba(0,0,0,0.05); display: flex; justify-content: space-around; align-items: flex-start; padding-top: 15px; padding-bottom: calc(var(--safe-bottom) + 10px); z-index: 20; }
         .ws-nav-item { padding: 0.6rem 0.8rem; border-radius: 20px; font-size: 0.95rem; font-weight: 600; color: var(--text-muted); transition: all 0.2s; cursor: pointer; text-align: center; }
         .ws-nav-item.active { background: var(--input-bg); color: var(--text-main); }
@@ -91,7 +109,18 @@
         /* 写作模块 */
         .editor-container { display: flex; flex-direction: column; gap: 1rem; flex: 1; position: relative;}
         .prompt-box textarea { width: 100%; height: 90px; padding: 1.2rem; border-radius: 20px; background-color: var(--input-bg); border: none; resize: none; outline: none; font-size: 1rem; line-height: 1.5; margin-bottom: 0.5rem; color: var(--text-main); }
-        .blocks-container { flex: 1; background-color: var(--surface-color); border-radius: 24px; padding: 1.5rem; box-shadow: var(--shadow-soft); overflow-y: auto; min-height: 300px; }
+        
+        /* --- 核心修复 3：在正文编辑区内部增加 5rem 的底部留白，方便光标定位与修改 --- */
+        .blocks-container { 
+            flex: 1; 
+            background-color: var(--surface-color); 
+            border-radius: 24px; 
+            padding: 1.5rem; 
+            padding-bottom: 5rem; 
+            box-shadow: var(--shadow-soft); 
+            overflow-y: auto; 
+            min-height: 300px; 
+        }
         .draft-block { padding: 0.5rem; border-radius: 12px; line-height: 1.8; outline: none; transition: background 0.2s; min-height: 100%; }
         .btn-generate { width: 100%; background: var(--accent-primary); color: white; border: none; padding: 1rem; border-radius: 20px; font-weight: 600; cursor: pointer; transition: opacity 0.2s;}
         .btn-generate:disabled { opacity: 0.6; cursor: not-allowed; }
