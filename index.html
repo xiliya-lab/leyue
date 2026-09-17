@@ -673,9 +673,19 @@
                     this.disabled = true;
                     try {
                         const model = document.getElementById('current-model-input').value;
+                        // 🚀 补上缺失的安全解除滤网，防止保存大尺度章节时提炼剧情报错
+                        const safeSettings = [
+                            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+                            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+                            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+                            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+                        ];
                         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${foundKey}`, {
                             method: 'POST', headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: `请将以下小说段落浓缩成不超过 40 字的核心剧情摘要（作为以后大模型续写的记忆点）。只输出摘要纯文本，严禁包含任何废话：\n\n"${pureText.slice(0, 1500)}"` }] }] })
+                            body: JSON.stringify({ 
+                                contents: [{ role: "user", parts: [{ text: `请将以下小说段落浓缩成不超过 40 字的核心剧情摘要（作为以后大模型续写的记忆点）。只输出摘要纯文本，严禁包含任何废话：\n\n"${pureText.slice(0, 1500)}"` }] }],
+                                safetySettings: safeSettings 
+                            })
                         });
                         if (res.ok) {
                             const data = await res.json();
