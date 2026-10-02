@@ -232,8 +232,13 @@
             <div id="ws-tab-write" class="workspace-tab-content active">
                 <div class="editor-container" id="editor-container-box">
                     <div class="card prompt-box" style="margin-bottom: 0;">
-                        <textarea id="ai-prompt-input" placeholder="输入本章走向... (系统将自动注入角色档案与前情记忆)"></textarea>
-                        <button id="btn-generate" class="btn-generate">生成</button>
+                        <textarea id="ai-prompt-input" placeholder="输入本章走向... (系统将自动注入角色档案与前文原文)"></textarea>
+                        <div style="display: flex; gap: 0.8rem;">
+                            <select id="context-range-select" style="flex: 0.8; background: var(--input-bg); border: none; border-radius: 20px; padding: 0 1rem; color: var(--text-main); font-weight: 600; outline: none; cursor: pointer; text-align: center; font-size: 0.95rem;">
+                                <!-- 选项由 JS 动态生成 -->
+                            </select>
+                            <button id="btn-generate" class="btn-generate" style="flex: 1.2; width: auto; margin: 0;">生成</button>
+                        </div>
                     </div>
                     <div id="draft-blocks" class="blocks-container" contenteditable="true"></div>
                     <div id="ai-float-toolbar" class="ai-float-toolbar">润色</div>
@@ -407,6 +412,15 @@
             const keySelect = document.getElementById('key-select');
             for(let i = 1; i <= 30; i++) keySelect.add(new Option(i.toString().padStart(4, '0')));
             
+            // 初始化读取前几章的选项 (1到30章)
+            const rangeSelect = document.getElementById('context-range-select');
+            if (rangeSelect) {
+                for (let i = 1; i <= 30; i++) {
+                    rangeSelect.add(new Option(`读取前 ${i} 章`, i));
+                }
+                rangeSelect.value = "3"; // 默认读取前3章
+            }
+
             const saved = localStorage.getItem('morandi_settings');
             if (saved) {
                 const config = JSON.parse(saved);
@@ -540,15 +554,19 @@
                 const model = document.getElementById('current-model-input').value;
                 const book = libraryData[currentEditingBookId];
                 
-                let summaryContext = "";
-                if(book.chapterSummaries && book.chapterSummaries.length > 0) {
-                    summaryContext = "\n\n【前情总纲 (你必须记住这些已发生的情节)】：\n" + book.chapterSummaries.map((s, i) => `第${i+1}章：${s}`).join('\n');
-                }
-
+                // --- 新增：按范围读取前文原文 ---
                 let previousContext = "";
+                const range = parseInt(document.getElementById('context-range-select').value) || 3;
                 if(book.chapters.length > 0) {
-                    const lastChap = book.chapters[book.chapters.length - 1];
-                    previousContext = "\n\n【上一章结尾(紧接此剧情往下写)】：\n" + lastChap.replace(/<[^>]+>/g, '').slice(-800);
+                    // 计算从哪一章开始读取
+                    const startIndex = Math.max(0, book.chapters.length - range);
+                    let recentChaptersText = [];
+                    for (let i = startIndex; i < book.chapters.length; i++) {
+                        let tmp = document.createElement("DIV");
+                        tmp.innerHTML = book.chapters[i];
+                        recentChaptersText.push(`【第 ${i + 1} 章内容】：\n${tmp.textContent || tmp.innerText}`);
+                    }
+                    previousContext = "\n\n【前文原文内容 (请仔细阅读以下前文剧情，在行文逻辑和细节上紧接最后的情节继续往下写)】：\n" + recentChaptersText.join('\n\n');
                 }
 
                 let charContext = "";
@@ -564,7 +582,7 @@
                 
                 请严格基于以下设定和前文，续写小说正文：
                 【世界背景】：${document.getElementById('world-bg-input').value}
-                【专属规则】：${document.getElementById('writing-rules-input').value}${charContext}${summaryContext}${previousContext}${refContext}
+                【专属规则】：${document.getElementById('writing-rules-input').value}${charContext}${previousContext}${refContext}
                 
                 作为顶级言情作家，你必须绝对遵守以下【四大铁律】：
                 1. 错落有致的“呼吸感”排版：完美融合轻快与厚重，平时必须切碎段落（单句或两三句成段，有人说话必换行）；需要长篇幅描写时，允许段落稍长，但也必须适时拆解，保持视觉清爽。
@@ -654,46 +672,16 @@
                 if(!currentEditingBookId) return;
                 const draftBox = document.getElementById('draft-blocks');
                 const textHTML = draftBox.innerHTML.trim(); 
-                const pureText = draftBox.innerText.trim();
                 
                 if(!textHTML || getWordCount(textHTML) < 10) return alert("没有实质内容，无法保存！");
 
-                const activeId = document.getElementById('key-select').value;
-                const foundKey = document.getElementById('keystore-input').value.split('\n').find(l => l.trim().startsWith(activeId + '='))?.split('=')[1]?.trim();
-                
                 const book = libraryData[currentEditingBookId];
                 book.worldBg = document.getElementById('world-bg-input').value;
                 book.writingRules = document.getElementById('writing-rules-input').value;
                 book.referenceText = document.getElementById('reference-text-input').value; // 保存参考
 
-                let summary = "（暂无提要，可手动修改补充）"; 
-
-                if(foundKey) {
-                    this.innerText = '提炼剧情中...';
-                    this.disabled = true;
-                    try {
-                        const model = document.getElementById('current-model-input').value;
-                        const safeSettings = [
-                            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-                            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-                            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-                            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
-                        ];
-                        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${foundKey}`, {
-                            method: 'POST', headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ 
-                                contents: [{ role: "user", parts: [{ text: `请将以下小说段落浓缩成不超过 40 字的核心剧情摘要（作为以后大模型续写的记忆点）。只输出摘要纯文本，严禁包含任何废话：\n\n"${pureText.slice(0, 1500)}"` }] }],
-                                safetySettings: safeSettings 
-                            })
-                        });
-                        if (res.ok) {
-                            const data = await res.json();
-                            summary = data.candidates[0].content.parts[0].text.replace(/\n/g, '');
-                        }
-                    } catch(e) { console.error("Summary Gen Error", e); }
-                    this.innerText = '保存';
-                    this.disabled = false;
-                }
+                // 删除耗时的AI生成摘要，改为静态文字
+                let summary = "全文上下文模式（无需提要）"; 
 
                 book.chapters.push(textHTML);
                 book.chapterSummaries.push(summary);
@@ -704,7 +692,7 @@
                 draftBox.innerHTML = '';
                 document.getElementById('ws-word-count').innerText = `草稿: 0 字`;
                 
-                alert(`已保存为第 ${book.chapters.length} 章！\n自动提取摘要：${summary}`);
+                alert(`保存成功！当前共 ${book.chapters.length} 章。`);
                 renderCreatorGrid(); renderBookshelfGrid();
                 if(document.getElementById('ws-tab-chapters').classList.contains('active')) renderChapterList();
             });
@@ -1029,3 +1017,4 @@ ${fullDraftText.length > 1500 ? '...' + fullDraftText.slice(-1500) : fullDraftTe
     </script>
 </body>
 </html>
+   
