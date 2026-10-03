@@ -808,12 +808,19 @@ ${fullDraftText.length > 1500 ? '...' + fullDraftText.slice(-1500) : fullDraftTe
                 let txtContent = `《${book.title}》\n\n`;
                 book.chapters.forEach((ch, i) => {
                     txtContent += `=== 第 ${i+1} 章 ===\n\n`;
-                    // 将 HTML 的段落结尾和换行替换为真正的 TXT 回车符
-                    let rawText = ch.replace(/<\/p>/gi, '\n\n')
-                                    .replace(/<br\s*[\/]?>/gi, '\n')
-                                    .replace(/<[^>]+>/g, '') // 清除剩余所有代码标签
-                                    .replace(/&nbsp;/g, ' '); // 修复特殊空格
-                    txtContent += rawText.trim() + '\n\n\n';
+                    
+                    // 将章节内容按 </p> 结尾标签拆分成多个独立的段落
+                    let paragraphs = ch.split(/<\/p>/i);
+                    paragraphs.forEach(p => {
+                        // 清除当前段落内的所有 HTML 标签，并去掉首尾可能多余的普通空格
+                        let cleanP = p.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim();
+                        if (cleanP) {
+                            // 强制在每一段的开头拼接两个“中文全角空格”，然后加上段落回车
+                            txtContent += '　　' + cleanP + '\n\n';
+                        }
+                    });
+                    
+                    txtContent += '\n'; // 章节之间再多留一行空隙
                 });
                 const blob = new Blob([txtContent], { type: "text/plain;charset=utf-8" });
                 const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${book.title}.txt`; a.click();
