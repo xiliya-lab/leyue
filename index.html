@@ -574,7 +574,18 @@
                 }
 
                 let refText = document.getElementById('reference-text-input').value.trim();
-                let refContext = refText ? `\n\n【神级文风参考】(请极度精准地深度模仿以下文本的行文结构、遣词造句、环境描写和叙事节奏)：\n${refText.slice(0, 5000)}` : "";
+                let refContext = "";
+                if (refText) {
+                    let chunkSize = 5000;
+                    let chunk = refText;
+                    // 如果文本大于5000字，就随机选一个起点截取
+                    if (refText.length > chunkSize) {
+                        let maxIndex = refText.length - chunkSize;
+                        let startIndex = Math.floor(Math.random() * maxIndex);
+                        chunk = refText.slice(startIndex, startIndex + chunkSize);
+                    }
+                    refContext = `\n\n【神级文风参考】(请极度精准地深度模仿以下文本的行文结构、遣词造句、叙事节奏和环境描写。**强制要求：严禁总使用你惯用的套路化形容词，从以下参考文本中提取并使用生动、高级的词汇！**)：\n${chunk}`;
+                }
 
                 const sys = `你现在是一位处于创作巅峰期的顶级小说大神，深谙现代读者的阅读节奏，同时具备极高的文学素养与电影级的画面刻画能力。
                 
