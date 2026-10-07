@@ -412,13 +412,12 @@
             const keySelect = document.getElementById('key-select');
             for(let i = 1; i <= 30; i++) keySelect.add(new Option(i.toString().padStart(4, '0')));
             
-            // 初始化读取前几章的选项 (1到30章)
             const rangeSelect = document.getElementById('context-range-select');
             if (rangeSelect) {
                 for (let i = 1; i <= 30; i++) {
                     rangeSelect.add(new Option(`读取前 ${i} 章`, i));
                 }
-                rangeSelect.value = "3"; // 默认读取前3章
+                rangeSelect.value = "3";
             }
 
             const saved = localStorage.getItem('morandi_settings');
@@ -504,7 +503,6 @@
             document.getElementById('writing-rules-input').addEventListener('input', autoSaveBackground);
             document.getElementById('reference-text-input').addEventListener('input', autoSaveBackground);
 
-            // 🚀 监听 TXT 文件导入
             document.getElementById('file-import-reference').addEventListener('change', (e) => {
                 const file = e.target.files[0]; if(!file) return;
                 const reader = new FileReader();
@@ -573,18 +571,19 @@
                     charContext = "\n\n【核心出场角色档案 (严格保持人设)】：\n" + book.characters.map(c => `- ${c.name} (${c.role}): 外貌[${c.appearance}], 性格[${c.personality}], 关系[${c.relation}]`).join('\n');
                 }
 
+                // 🚀 终极修复：安全的随机切分，绝不劈开生僻字导致 API 宕机
                 let refText = document.getElementById('reference-text-input').value.trim();
                 let refContext = "";
                 if (refText) {
                     let chunkSize = 5000;
                     let chunk = refText;
-                    // 如果文本大于5000字，就随机选一个起点截取
-                    if (refText.length > chunkSize) {
-                        let maxIndex = refText.length - chunkSize;
+                    let chars = Array.from(refText); // 将文字按真正的字符边界拆分，防止切碎 Emoji 和特殊汉字
+                    if (chars.length > chunkSize) {
+                        let maxIndex = chars.length - chunkSize;
                         let startIndex = Math.floor(Math.random() * maxIndex);
-                        chunk = refText.slice(startIndex, startIndex + chunkSize);
+                        chunk = chars.slice(startIndex, startIndex + chunkSize).join('');
                     }
-                    refContext = `\n\n【神级文风参考】(请极度精准地深度模仿以下文本的行文结构、遣词造句、叙事节奏和环境描写。)：\n${chunk}`;
+                    refContext = `\n\n【神级文风参考】(请极度精准地深度模仿以下文本的行文结构、叙事节奏和修辞手法。**强制要求：严禁使用你惯用的套路化形容词，必须从以下参考文本中提取并使用生动、高级的词汇！**)：\n${chunk}`;
                 }
 
                 const sys = `你现在是一位处于创作巅峰期的顶级小说大神，深谙现代读者的阅读节奏，同时具备极高的文学素养与电影级的画面刻画能力。
@@ -635,8 +634,6 @@
                         throw new Error(`API_ERROR: ${data.error ? data.error.message : res.statusText}`);
                     }
                     
-                    // --- 🔥 终极无死角拦截修复 🔥 ---
-                    // 只要 data.candidates 是空的，直接拦截
                     if (!data.candidates || data.candidates.length === 0) {
                         if (data.promptFeedback && data.promptFeedback.blockReason) {
                             throw new Error(`SAFETY_BLOCKED: ${data.promptFeedback.blockReason}`);
@@ -645,7 +642,6 @@
                     }
                     
                     const cand = data.candidates[0];
-                    // 只要没返回正常的 content，或者 content 里面连 parts 数组都没有，直接判定为被系统阉割了
                     if (cand.finishReason === 'SAFETY' || !cand.content || !cand.content.parts || cand.content.parts.length === 0 || !cand.content.parts[0].text) {
                         throw new Error("SAFETY_BLOCKED: 触发了强制红线，API拒绝返回任何文字");
                     }
@@ -746,14 +742,26 @@
                 const fullDraftText = document.getElementById('draft-blocks').innerText;
                 const bg = document.getElementById('world-bg-input').value;
                 const rules = document.getElementById('writing-rules-input').value;
-                const refText = document.getElementById('reference-text-input').value.trim(); 
                 
                 let charContext = "";
                 if (book.characters && book.characters.length > 0) {
                     charContext = book.characters.map(c => `${c.name}(${c.role})`).join('，');
                 }
                 
-                let refContext = refText ? `\n【文风基调参考(请高度模仿其风格)】：\n${refText.slice(0, 3000)}` : "";
+                // 🚀 同样修复润色功能的随机切字 Bug
+                let refText = document.getElementById('reference-text-input').value.trim();
+                let refContext = "";
+                if (refText) {
+                    let chunkSize = 5000;
+                    let chunk = refText;
+                    let chars = Array.from(refText);
+                    if (chars.length > chunkSize) {
+                        let maxIndex = chars.length - chunkSize;
+                        let startIndex = Math.floor(Math.random() * maxIndex);
+                        chunk = chars.slice(startIndex, startIndex + chunkSize).join('');
+                    }
+                    refContext = `\n【文风基调参考(请高度模仿其风格)】：\n${chunk}`;
+                }
 
                 const sysPrompt = `你是一个顶级小说润色助手。
 【全局设定】：背景[${bg}]，规则[${rules}]，出场角色[${charContext}]${refContext}
@@ -787,7 +795,6 @@ ${fullDraftText.length > 1500 ? '...' + fullDraftText.slice(-1500) : fullDraftTe
                     
                     const data = await res.json();
                     
-                    // --- 🔥 润色按钮同款终极拦截修复 🔥 ---
                     if (!data.candidates || data.candidates.length === 0) {
                         throw new Error("SAFETY_BLOCKED: 触发了强制红线");
                     }
@@ -814,29 +821,23 @@ ${fullDraftText.length > 1500 ? '...' + fullDraftText.slice(-1500) : fullDraftTe
                 }
             });
 
-                        document.getElementById('btn-export-txt').addEventListener('click', () => {
+            document.getElementById('btn-export-txt').addEventListener('click', () => {
                 const book = libraryData[currentReaderBookId];
                 let txtContent = `《${book.title}》\n\n`;
                 book.chapters.forEach((ch, i) => {
                     txtContent += `=== 第 ${i+1} 章 ===\n\n`;
-                    
-                    // 将章节内容按 </p> 结尾标签拆分成多个独立的段落
                     let paragraphs = ch.split(/<\/p>/i);
                     paragraphs.forEach(p => {
-                        // 清除当前段落内的所有 HTML 标签，并去掉首尾可能多余的普通空格
                         let cleanP = p.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim();
                         if (cleanP) {
-                            // 强制在每一段的开头拼接两个“中文全角空格”，然后加上段落回车
                             txtContent += '　　' + cleanP + '\n\n';
                         }
                     });
-                    
-                    txtContent += '\n'; // 章节之间再多留一行空隙
+                    txtContent += '\n'; 
                 });
                 const blob = new Blob([txtContent], { type: "text/plain;charset=utf-8" });
                 const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${book.title}.txt`; a.click();
             });
-
 
             document.getElementById('btn-export-json').addEventListener('click', () => {
                 const blob = new Blob([JSON.stringify(libraryData)], { type: "application/json" });
@@ -1041,8 +1042,6 @@ ${fullDraftText.length > 1500 ? '...' + fullDraftText.slice(-1500) : fullDraftTe
             document.getElementById('btn-reader-prev').disabled = (currentReaderChapterIndex === 0);
             document.getElementById('btn-reader-next').disabled = (currentReaderChapterIndex === book.chapters.length - 1);
         }
-
-        if ('serviceWorker' in navigator) { window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(err => console.log('SW失败', err))); }
     </script>
 </body>
 </html>
