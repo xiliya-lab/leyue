@@ -128,12 +128,10 @@
         .reader-overlay.open { transform: translateX(0); }
         .reader-header { display: flex; align-items: center; padding: calc(var(--safe-top) + 1rem) 1.5rem 1rem 1.5rem; border-bottom: 1px solid var(--input-bg); }
         .reader-title { flex: 1; text-align: center; font-weight: 600; font-size: 1.1rem; margin-right: 40px; }
-        .reader-content { flex: 1; overflow-y: auto; padding: 2rem; font-size: 1.15rem; line-height: 2; color: var(--text-main); text-align: justify; padding-bottom: calc(var(--safe-bottom) + 110px); }
+        .reader-content { flex: 1; overflow-y: auto; padding: 2rem; font-size: 1.15rem; line-height: 2; color: var(--text-main); text-align: justify; padding-bottom: calc(var(--safe-bottom) + 90px); }
         .reader-chapter-title { font-size: 1.4rem; font-weight: bold; margin-bottom: 1.5rem; color: var(--accent-primary); text-align: center; }
-        
-        /* 修改了此处的阅读器底部导航样式 */
-        .reader-bottom-nav { position: absolute; bottom: 0; left: 0; width: 100%; background: var(--surface-color); border-top: 1px solid var(--input-bg); display: flex; justify-content: space-between; align-items: center; padding: 20px 30px calc(var(--safe-bottom) + 20px); z-index: 10; }
-        .reader-nav-btn { background: none; border: none; font-size: 1.05rem; color: var(--text-main); font-weight: 600; cursor: pointer; padding: 10px; margin: -10px; }
+        .reader-bottom-nav { position: absolute; bottom: 0; left: 0; width: 100%; height: calc(var(--nav-height) + var(--safe-bottom)); background: var(--surface-color); border-top: 1px solid var(--input-bg); display: flex; justify-content: space-between; align-items: flex-start; padding: 15px 30px 0; z-index: 10; }
+        .reader-nav-btn { background: none; border: none; font-size: 1.05rem; color: var(--text-main); font-weight: 600; cursor: pointer; }
         .reader-nav-btn:disabled { color: var(--text-muted); opacity: 0.4; cursor: not-allowed; }
 
         /* 目录弹窗 */
@@ -729,6 +727,7 @@
                 } else { setTimeout(() => { if(!toolbar.matches(':hover')) toolbar.style.display = 'none'; }, 100); }
             });
 
+            // 🚀 修改部分：优化后的划词润色事件
             toolbar.addEventListener('click', async () => {
                 if(!currentSelectedRange) return;
                 const selectedText = currentSelectedRange.toString().trim();
@@ -755,8 +754,20 @@
                     charContext = book.characters.map(c => `${c.name}(${c.role})`).join('，');
                 }
                 
-                let refContext = refText ? `\n【文风基调参考(请高度模仿其风格)】：\n${refText.slice(0, 3000)}` : "";
+                // --- 优化1：修改为与正文生成一致的随机截取逻辑，避免每次只截取开头 3000 字 ---
+                let refContext = "";
+                if (refText) {
+                    let chunkSize = 3000;
+                    let chunk = refText;
+                    if (refText.length > chunkSize) {
+                        let maxIndex = refText.length - chunkSize;
+                        let startIndex = Math.floor(Math.random() * maxIndex);
+                        chunk = refText.slice(startIndex, startIndex + chunkSize);
+                    }
+                    refContext = `\n【文风基调参考(请高度模仿其风格)】：\n${chunk}`;
+                }
 
+                // --- 优化3：在 System Prompt 强化限制，防止 AI 加戏推进剧情 ---
                 const sysPrompt = `你是一个顶级小说润色助手。
 【全局设定】：背景[${bg}]，规则[${rules}]，出场角色[${charContext}]${refContext}
 【当前正文上下文(仅供参考语气和剧情，不要重复输出它们)】：
@@ -799,12 +810,18 @@ ${fullDraftText.length > 1500 ? '...' + fullDraftText.slice(-1500) : fullDraftTe
                     }
 
                     let newText = cand.content.parts[0].text;
-                    newText = newText.replace(/^["'「”]+|["'」”]+$/g, '').replace(/\n/g, '<br>');
+                    newText = newText.replace(/^["'「”]+|["'」”]+$/g, '');
+                    
+                    // --- 优化2：修复排版污染。将返回的文本拆分，并用和生成正文一致的 <p> 标签包裹 ---
+                    const html = newText.split('\n')
+                        .filter(p => p.trim() !== '')
+                        .map(p => `<p style="margin-bottom:1em; text-indent: 2em;">${p.trim()}</p>`)
+                        .join('');
                     
                     const selection = window.getSelection();
                     selection.removeAllRanges(); 
                     selection.addRange(currentSelectedRange);
-                    document.execCommand('insertHTML', false, newText); 
+                    document.execCommand('insertHTML', false, html); 
                     autoSaveDraft();
                 } catch(e) { 
                     let errStr = e.message || e.toString();
@@ -816,7 +833,7 @@ ${fullDraftText.length > 1500 ? '...' + fullDraftText.slice(-1500) : fullDraftTe
                 }
             });
 
-                        document.getElementById('btn-export-txt').addEventListener('click', () => {
+            document.getElementById('btn-export-txt').addEventListener('click', () => {
                 const book = libraryData[currentReaderBookId];
                 let txtContent = `《${book.title}》\n\n`;
                 book.chapters.forEach((ch, i) => {
